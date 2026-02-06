@@ -59,6 +59,29 @@ Ora puoi puntare OpenClaw dall'altro tuo computer usando l'IP del Raspberry Pi.
    - **Base URL**: `http://192.168.1.50:4000/v1`
 
 
+## 🤖 Setup Completo "AI Box" (Proxy + OpenClaw su Raspberry)
+
+Se vuoi che il Raspberry faccia tutto (sia da proxy che da agente), puoi installare OpenClaw direttamente lì.
+
+1. **Installa OpenClaw** (richiede Node.js):
+   ```bash
+   sudo npm install -g openclaw
+   ```
+
+2. **Configura OpenClaw** per usare il proxy locale:
+   - **Provider**: `openai`
+   - **Base URL**: `http://localhost:4000/v1` (usiamo localhost perché sono sulla stessa macchina)
+   - **Model**: `gpt-4o`
+
+3. **Avvia OpenClaw con PM2**:
+   ```bash
+   pm2 start openclaw --name "openclaw-agent"
+   pm2 save
+   ```
+
+Ora hai un agente AI autonomo attivo 24/7 sul tuo Raspberry Pi! 🚀
+
+
 ## 📋 Modelli Supportati
 
 Puter.js supporta moltissimi modelli. Ecco i principali verificati:
