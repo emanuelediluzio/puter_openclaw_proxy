@@ -1,6 +1,3 @@
-<<<<<<< HEAD
-# puter_openclaw_proxy
-=======
 # Puter-OpenClaw Proxy
 
 Un server proxy Node.js che fa da ponte tra **OpenClaw.ai** e i modelli AI gratuiti di **Puter.js**.
@@ -15,18 +12,52 @@ npm install
 npm start
 ```
 
-Il proxy sarà attivo su `http://localhost:4000`.
+## 🍓 Installazione su Raspberry Pi
 
-## ⚙️ Configurazione OpenClaw
+Ecco come eseguire il proxy su un Raspberry Pi per averlo sempre attivo nella tua rete locale.
 
-Dopo aver avviato il proxy, configura OpenClaw con questi parametri:
+### 1. Prerequisiti
+Assicurati di avere **Node.js** (versione 18 o superiore) installato sul Raspberry.
+```bash
+# Aggiorna il sistema
+sudo apt update && sudo apt upgrade -y
 
-| Parametro | Valore |
-|-----------|--------|
-| **Provider** | `openai` |
-| **Base URL** | `http://localhost:4000/v1` |
-| **API Key** | `any-string` (qualsiasi valore) |
-| **Model** | `gpt-4o` (o altri modelli supportati) |
+# Installa Node.js (se non presente)
+curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+sudo apt install -y nodejs
+```
+
+### 2. Installazione
+Clona il repository ed entra nella cartella:
+```bash
+git clone https://github.com/emanuelediluzio/puter_openclaw_proxy.git
+cd puter_openclaw_proxy
+npm install
+```
+
+### 3. Avvio Automatico (Process Manager 2)
+Per mantenere il proxy attivo anche se chiudi il terminale o riavvii il Raspberry, usa `pm2`.
+
+```bash
+# Installa pm2 globalmente
+sudo npm install -g pm2
+
+# Avvia il proxy
+pm2 start puter-proxy.js --name "puter-proxy"
+
+# Configura l'avvio automatico al boot
+pm2 startup
+# (esegui il comando che ti suggerisce pm2)
+pm2 save
+```
+
+### 4. Utilizzo in Rete Locale
+Ora puoi puntare OpenClaw dall'altro tuo computer usando l'IP del Raspberry Pi.
+
+1. Trova l'IP del Raspberry: `hostname -I` (es. `192.168.1.50`)
+2. Configura OpenClaw:
+   - **Base URL**: `http://192.168.1.50:4000/v1`
+
 
 ## 📋 Modelli Supportati
 
@@ -89,4 +120,3 @@ curl -X POST http://localhost:4000/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
->>>>>>> 40efd78 (Initial commit: Puter Proxy with OpenAI compatible API)
