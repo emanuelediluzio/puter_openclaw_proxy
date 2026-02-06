@@ -30,14 +30,18 @@ After starting the proxy, configure OpenClaw with these parameters:
 Here's how to run the proxy on a Raspberry Pi to keep it always active on your local network.
 
 ### 1. Prerequisites
-Ensure **Node.js** (version 18 or higher) is installed on your Raspberry Pi.
+**Node.js 20+ is required** (OpenClaw will not work with version 18).
+
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Node.js (version 20 LTS recommended)
+# Install Node.js 20
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
+
+# Install pnpm (required for building OpenClaw)
+sudo npm install -g pnpm
 ```
 
 ### 2. Installation
@@ -75,9 +79,18 @@ Now you can point OpenClaw from your main computer using the Raspberry Pi's IP.
 
 If you want the Raspberry Pi to handle everything (acting as both proxy and agent), you can install OpenClaw directly on it.
 
-1. **Install OpenClaw** (requires Node.js):
+1. **Install OpenClaw** (Official Repo):
    ```bash
-   sudo npm install -g openclaw
+   # Remove old/placeholder package if present
+   npm uninstall -g openclaw
+
+   # Clone official repo
+   git clone https://github.com/OpenClaw/OpenClaw.git openclaw-app
+   cd openclaw-app
+   
+   # Install dependencies and build
+   npm install
+   pnpm run build
    ```
 
 2. **Configure OpenClaw** to use the local proxy:
@@ -87,7 +100,7 @@ If you want the Raspberry Pi to handle everything (acting as both proxy and agen
 
 3. **Start OpenClaw with PM2**:
    ```bash
-   pm2 start node --name "openclaw-agent" -- node_modules/openclaw/index.js
+   pm2 start npm --name "openclaw-agent" -- start
    pm2 save
    ```
 
