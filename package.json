@@ -1,0 +1,23 @@
+{
+  "name": "puter_openclaw_proxy",
+  "version": "1.0.0",
+  "description": "Proxy server che collega OpenClaw.ai ai modelli gratuiti di Puter.js",
+  "main": "puter-proxy.js",
+  "scripts": {
+    "start": "node puter-proxy.js",
+    "dev": "node puter-proxy.js"
+  },
+  "keywords": [
+    "puter",
+    "openclaw",
+    "proxy",
+    "ai",
+    "openai"
+  ],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "puter-sdk": "^1.5.0"
+  }
+}
