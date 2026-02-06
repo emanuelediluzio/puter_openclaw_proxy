@@ -22,8 +22,8 @@ Assicurati di avere **Node.js** (versione 18 o superiore) installato sul Raspber
 # Aggiorna il sistema
 sudo apt update && sudo apt upgrade -y
 
-# Installa Node.js (se non presente)
-curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+# Installa Node.js (versione 20 LTS raccomandata)
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
