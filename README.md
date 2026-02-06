@@ -30,14 +30,14 @@ After starting the proxy, configure OpenClaw with these parameters:
 Here's how to run the proxy on a Raspberry Pi to keep it always active on your local network.
 
 ### 1. Prerequisites
-**Node.js 20+ is required** (OpenClaw will not work with version 18).
+**Node.js 22+ is required** (OpenClaw is bleeding edge!).
 
 ```bash
 # Update system
 sudo apt update && sudo apt upgrade -y
 
-# Install Node.js 20
-curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+# Install Node.js 22
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
 sudo apt install -y nodejs
 
 # Install pnpm (required for building OpenClaw)
