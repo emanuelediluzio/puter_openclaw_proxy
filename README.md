@@ -1,90 +1,101 @@
 # Puter-OpenClaw Proxy
 
-Un server proxy Node.js che fa da ponte tra **OpenClaw.ai** e i modelli AI gratuiti di **Puter.js**.
+A Node.js proxy server that bridges **OpenClaw.ai** with the free AI models provided by **Puter.js**.
 
 ## 🚀 Quick Start
 
 ```bash
-# Installa le dipendenze
+# Install dependencies
 npm install
 
-# Avvia il proxy
+# Start the proxy
 npm start
 ```
 
-## 🍓 Installazione su Raspberry Pi
+The proxy will be active at `http://localhost:4000`.
 
-Ecco come eseguire il proxy su un Raspberry Pi per averlo sempre attivo nella tua rete locale.
+## ⚙️ OpenClaw Configuration
 
-### 1. Prerequisiti
-Assicurati di avere **Node.js** (versione 18 o superiore) installato sul Raspberry.
+After starting the proxy, configure OpenClaw with these parameters:
+
+| Parameter | Value |
+|-----------|-------|
+| **Provider** | `openai` |
+| **Base URL** | `http://localhost:4000/v1` |
+| **API Key** | `any-string` (any value works) |
+| **Model** | `gpt-4o` (or other supported models) |
+
+## 🍓 Raspberry Pi Installation
+
+Here's how to run the proxy on a Raspberry Pi to keep it always active on your local network.
+
+### 1. Prerequisites
+Ensure **Node.js** (version 18 or higher) is installed on your Raspberry Pi.
 ```bash
-# Aggiorna il sistema
+# Update system
 sudo apt update && sudo apt upgrade -y
 
-# Installa Node.js (versione 20 LTS raccomandata)
+# Install Node.js (version 20 LTS recommended)
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 ```
 
-### 2. Installazione
-Clona il repository ed entra nella cartella:
+### 2. Installation
+Clone the repository and enter the directory:
 ```bash
 git clone https://github.com/emanuelediluzio/puter_openclaw_proxy.git
 cd puter_openclaw_proxy
 npm install
 ```
 
-### 3. Avvio Automatico (Process Manager 2)
-Per mantenere il proxy attivo anche se chiudi il terminale o riavvii il Raspberry, usa `pm2`.
+### 3. Auto-start (Process Manager 2)
+To keep the proxy running even if you close the terminal or reboot the Raspberry Pi, use `pm2`.
 
 ```bash
-# Installa pm2 globalmente
+# Install pm2 globally
 sudo npm install -g pm2
 
-# Avvia il proxy
+# Start the proxy
 pm2 start puter-proxy.js --name "puter-proxy"
 
-# Configura l'avvio automatico al boot
+# Configure auto-start at boot
 pm2 startup
-# (esegui il comando che ti suggerisce pm2)
+# (execute the command suggested by pm2)
 pm2 save
 ```
 
-### 4. Utilizzo in Rete Locale
-Ora puoi puntare OpenClaw dall'altro tuo computer usando l'IP del Raspberry Pi.
+### 4. Local Network Usage
+Now you can point OpenClaw from your main computer using the Raspberry Pi's IP.
 
-1. Trova l'IP del Raspberry: `hostname -I` (es. `192.168.1.50`)
-2. Configura OpenClaw:
+1. Find the Raspberry Pi IP: `hostname -I` (e.g. `192.168.1.50`)
+2. Configure OpenClaw:
    - **Base URL**: `http://192.168.1.50:4000/v1`
 
+## 🤖 Complete "AI Box" Setup (Proxy + OpenClaw on Raspberry)
 
-## 🤖 Setup Completo "AI Box" (Proxy + OpenClaw su Raspberry)
+If you want the Raspberry Pi to handle everything (acting as both proxy and agent), you can install OpenClaw directly on it.
 
-Se vuoi che il Raspberry faccia tutto (sia da proxy che da agente), puoi installare OpenClaw direttamente lì.
-
-1. **Installa OpenClaw** (richiede Node.js):
+1. **Install OpenClaw** (requires Node.js):
    ```bash
    sudo npm install -g openclaw
    ```
 
-2. **Configura OpenClaw** per usare il proxy locale:
+2. **Configure OpenClaw** to use the local proxy:
    - **Provider**: `openai`
-   - **Base URL**: `http://localhost:4000/v1` (usiamo localhost perché sono sulla stessa macchina)
+   - **Base URL**: `http://localhost:4000/v1` (we use localhost as they are on the same machine)
    - **Model**: `gpt-4o`
 
-3. **Avvia OpenClaw con PM2**:
+3. **Start OpenClaw with PM2**:
    ```bash
-   pm2 start openclaw --name "openclaw-agent"
+   pm2 start $(which openclaw) --name "openclaw-agent"
    pm2 save
    ```
 
-Ora hai un agente AI autonomo attivo 24/7 sul tuo Raspberry Pi! 🚀
+Now you have an autonomous AI agent running 24/7 on your Raspberry Pi! 🚀
 
+## 📋 Supported Models
 
-## 📋 Modelli Supportati
-
-Puter.js supporta moltissimi modelli. Ecco i principali verificati:
+Puter.js supports many models. Here are the main verified ones:
 
 ### OpenAI
 - `gpt-4o`
@@ -111,29 +122,29 @@ Puter.js supporta moltissimi modelli. Ecco i principali verificati:
 - `mixtral-8x22b`
 - `mixtral-8x7b`
 
-### Altri
+### Others
 - `wizardlm-2-8x22b` (Microsoft)
 - `deepseek-coder-v2` (DeepSeek)
 - `deepseek-v2-chat` (DeepSeek)
 
-> **Nota:** Il proxy tenta anche di recuperare la lista dinamica se l'SDK è autenticato. In caso contrario, usa questa lista di fallback.
+> **Note:** The proxy also attempts to fetch the dynamic list if the SDK is authenticated. Otherwise, it uses this fallback list.
 
-## 🔌 Endpoints API
+## 🔌 API Endpoints
 
-| Endpoint | Metodo | Descrizione |
+| Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/v1/chat/completions` | POST | Chat completions (formato OpenAI) |
-| `/v1/chat/completions/stream` | POST | Chat completions con streaming SSE |
-| `/v1/models` | GET | Lista dei modelli disponibili |
-| `/health` | GET | Health check del server |
+| `/v1/chat/completions` | POST | Chat completions (OpenAI format) |
+| `/v1/chat/completions/stream` | POST | Chat completions with SSE streaming |
+| `/v1/models` | GET | List available models |
+| `/health` | GET | Server health check |
 
-## 📝 Note
+## 📝 Notes
 
-- **Prima esecuzione**: Puter SDK potrebbe richiedere l'autenticazione via browser al primo utilizzo.
-- **Streaming**: L'endpoint `/v1/chat/completions/stream` supporta Server-Sent Events per risposte in tempo reale.
-- **Porta**: Di default usa la porta 4000. Puoi cambiarla con la variabile d'ambiente `PORT`.
+- **First Run**: Puter SDK might request authentication via browser on the first use (locally).
+- **Streaming**: The `/v1/chat/completions/stream` endpoint supports Server-Sent Events for real-time responses.
+- **Port**: Defaults to port 4000. You can change it with the `PORT` environment variable.
 
-## 🧪 Test Rapido
+## 🧪 Quick Test
 
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
