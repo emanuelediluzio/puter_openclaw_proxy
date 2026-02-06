@@ -87,7 +87,7 @@ If you want the Raspberry Pi to handle everything (acting as both proxy and agen
 
 3. **Start OpenClaw with PM2**:
    ```bash
-   pm2 start $(which openclaw) --name "openclaw-agent"
+   pm2 start node --name "openclaw-agent" -- node_modules/openclaw/index.js
    pm2 save
    ```
 
