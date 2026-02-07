@@ -160,7 +160,7 @@ app.use(express.json());
 app.post('/v1/chat/completions', async (req, res) => {
     try {
         const { messages, model, stream, temperature, max_tokens } = req.body;
-        const useModel = model || 'gpt-4o-mini';
+        const useModel = model || 'gpt-4.1';
 
         console.log(`Richiesta - Model: ${useModel}, Messages: ${messages?.length || 0}, Stream: ${!!stream}`);
 
