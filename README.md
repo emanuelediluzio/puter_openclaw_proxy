@@ -1,8 +1,16 @@
 # Puter-OpenClaw Proxy
 
-A Node.js proxy server that bridges **OpenClaw.ai** with the free AI models provided by **Puter.js**.
+A Node.js proxy server that bridges **OpenClaw.ai** with the free AI models provided by **Puter.js** - no API keys needed.
 
-## 🚀 Quick Start
+## How It Works
+
+```
+Telegram --> OpenClaw Gateway --> Puter Proxy (localhost:4000) --> Puter.js --> AI Models (GPT-4o, Claude, Gemini, etc.)
+```
+
+The proxy exposes an OpenAI-compatible API (`/v1/chat/completions`) that forwards requests to Puter.js, giving you free access to multiple AI models.
+
+## Quick Start
 
 ```bash
 # Install dependencies
@@ -12,22 +20,42 @@ npm install
 npm start
 ```
 
+On first run, you'll be prompted to authenticate with Puter (free account). Open the URL shown in the terminal, log in, and the token will be saved automatically.
+
 The proxy will be active at `http://localhost:4000`.
 
-## ⚙️ OpenClaw Configuration
+## OpenClaw Configuration
 
-After starting the proxy, configure OpenClaw with these parameters:
+OpenClaw must use a **custom provider name** (not `openai`) to avoid conflicts with built-in model definitions. Use `puter` as the provider and set `api: "openai-completions"` since the proxy only supports the `/v1/chat/completions` endpoint.
 
-| Parameter | Value |
-|-----------|-------|
-| **Provider** | `openai` |
-| **Base URL** | `http://localhost:4000/v1` |
-| **API Key** | `any-string` (any value works) |
-| **Model** | `gpt-4o` (or other supported models) |
+Add this to your `~/.openclaw/openclaw.json`:
 
-## 🍓 Raspberry Pi Installation
+```json
+{
+  "agents": {
+    "defaults": {
+      "models": {
+        "puter/gpt-4o": { "alias": "gpt-4o" }
+      },
+      "model": { "primary": "puter/gpt-4o" }
+    }
+  },
+  "models": {
+    "providers": {
+      "puter": {
+        "baseUrl": "http://127.0.0.1:4000/v1",
+        "apiKey": "sk-placeholder",
+        "api": "openai-completions",
+        "models": [{ "id": "gpt-4o", "name": "GPT-4o (Puter)" }]
+      }
+    }
+  }
+}
+```
 
-Here's how to run the proxy on a Raspberry Pi to keep it always active on your local network.
+**Important:** The provider MUST be called `puter` (not `openai`). If you use `openai`, OpenClaw will find the built-in `gpt-4o` model definition which points to `api.openai.com` and bypass the proxy entirely.
+
+## Raspberry Pi Installation
 
 ### 1. Prerequisites
 **Node.js 22+ is required** (OpenClaw is bleeding edge!).
@@ -45,39 +73,34 @@ sudo npm install -g pnpm
 ```
 
 ### 2. Installation
-Clone the repository and enter the directory:
+
 ```bash
 git clone https://github.com/emanuelediluzio/puter_openclaw_proxy.git
 cd puter_openclaw_proxy
 npm install
 ```
 
-### 3. Auto-start (Process Manager 2)
-To keep the proxy running even if you close the terminal or reboot the Raspberry Pi, use `pm2`.
+### 3. Auto-start with PM2
 
 ```bash
-# Install pm2 globally
 sudo npm install -g pm2
 
 # Start the proxy
 pm2 start puter-proxy.js --name "puter-proxy"
 
-# Configure auto-start at boot
+# Auto-start on boot
 pm2 startup
-# (execute the command suggested by pm2)
 pm2 save
 ```
 
-### 4. Local Network Usage
-Now you can point OpenClaw from your main computer using the Raspberry Pi's IP.
+### 4. Network Access
 
-1. Find the Raspberry Pi IP: `hostname -I` (e.g. `192.168.1.50`)
-2. Configure OpenClaw:
-   - **Base URL**: `http://192.168.1.50:4000/v1`
+Find your Raspberry Pi's IP with `hostname -I` and configure OpenClaw on other devices:
+- **Base URL**: `http://<raspberry-ip>:4000/v1`
 
-## 🤖 Complete "AI Box" Setup (Proxy + OpenClaw on Raspberry)
+## Complete "AI Box" Setup (Proxy + OpenClaw + Telegram)
 
-If you want the Raspberry Pi to handle everything (acting as both proxy and agent), you can install OpenClaw directly on it.
+Run everything on the Raspberry Pi:
 
 1. **Install OpenClaw** (Official Repo):
    ```bash
@@ -87,83 +110,70 @@ If you want the Raspberry Pi to handle everything (acting as both proxy and agen
    # Clone official repo
    git clone https://github.com/OpenClaw/OpenClaw.git openclaw-app
    cd openclaw-app
-   
+
    # Install dependencies and build
    npm install
    pnpm run build
    ```
 
-2. **Configure OpenClaw** to use the local proxy:
-   - **Provider**: `openai`
-   - **Base URL**: `http://localhost:4000/v1` (we use localhost as they are on the same machine)
-   - **Model**: `gpt-4o`
-
-3. **Start OpenClaw with PM2**:
+2. **Start the proxy** (must be running first):
    ```bash
-   pm2 start npm --name "openclaw-agent" -- start
+   pm2 start puter-proxy.js --name "puter-proxy"
+   ```
+
+3. **Run OpenClaw onboarding**:
+   ```bash
+   openclaw onboard
+   ```
+   - Select **local** gateway mode
+   - Connect your **Telegram** bot (you'll need a bot token from @BotFather)
+   - When asked for AI provider, choose custom/manual
+
+4. **Configure the model** in `~/.openclaw/openclaw.json` (see config above)
+
+5. **Start OpenClaw gateway with PM2**:
+   ```bash
+   pm2 start "openclaw gateway run --port 18789 --bind lan" --name "openclaw-gateway"
    pm2 save
    ```
 
-Now you have an autonomous AI agent running 24/7 on your Raspberry Pi! 🚀
+Now you have an autonomous AI bot on Telegram running 24/7 on your Raspberry Pi.
 
-## 📋 Supported Models
+## Supported Models
 
-Puter.js supports many models. Here are the main verified ones:
+The proxy supports all models available through Puter.js:
 
-### OpenAI
-- `gpt-4o`
-- `gpt-4o-mini`
-- `gpt-3.5-turbo`
+| Provider | Models |
+|----------|--------|
+| OpenAI | `gpt-4o`, `gpt-4o-mini`, `gpt-4.1`, `gpt-4.1-mini`, `o3-mini` |
+| Anthropic | `claude-3-5-sonnet`, `claude-3-haiku` |
+| Google | `gemini-2.0-flash`, `gemini-1.5-pro` |
+| Meta | `llama-3.1-70b` |
+| Mistral | `mistral-large` |
+| DeepSeek | `deepseek-chat`, `deepseek-reasoner` |
 
-### Anthropic
-- `claude-3-5-sonnet`
-- `claude-3-opus`
-- `claude-3-haiku`
-
-### Google
-- `gemini-1.5-pro`
-- `gemini-1.5-flash`
-- `gemma-2-9b-it`
-
-### Meta / Llama
-- `llama-3.1-405b`
-- `llama-3.1-70b`
-- `llama-3.1-8b`
-
-### Mistral
-- `mistral-large`
-- `mixtral-8x22b`
-- `mixtral-8x7b`
-
-### Others
-- `wizardlm-2-8x22b` (Microsoft)
-- `deepseek-coder-v2` (DeepSeek)
-- `deepseek-v2-chat` (DeepSeek)
-
-> **Note:** The proxy also attempts to fetch the dynamic list if the SDK is authenticated. Otherwise, it uses this fallback list.
-
-## 🔌 API Endpoints
+## API Endpoints
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/v1/chat/completions` | POST | Chat completions (OpenAI format) |
-| `/v1/chat/completions/stream` | POST | Chat completions with SSE streaming |
+| `/v1/chat/completions` | POST | Chat completions (OpenAI format, streaming supported) |
 | `/v1/models` | GET | List available models |
 | `/health` | GET | Server health check |
 
-## 📝 Notes
-
-- **First Run**: Puter SDK might request authentication via browser on the first use (locally).
-- **Streaming**: The `/v1/chat/completions/stream` endpoint supports Server-Sent Events for real-time responses.
-- **Port**: Defaults to port 4000. You can change it with the `PORT` environment variable.
-
-## 🧪 Quick Test
+## Quick Test
 
 ```bash
 curl -X POST http://localhost:4000/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-placeholder" \
   -d '{
     "model": "gpt-4o",
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 ```
+
+## Troubleshooting
+
+- **401 Incorrect API key**: You're using `openai` as provider name. Change it to `puter` in your OpenClaw config.
+- **Puter token expired**: Delete `.puter-token` and restart the proxy to re-authenticate.
+- **Port 4000 in use**: Set `PORT=4001 npm start` and update your OpenClaw config accordingly.

@@ -1,184 +1,149 @@
 const express = require('express');
-// puter-sdk exports a default class
-const Puter = require('puter-sdk').default;
+const fs = require('fs');
+const path = require('path');
+const http = require('http');
+
 const app = express();
+const TOKEN_FILE = path.join(__dirname, '.puter-token');
 
-app.use(express.json());
-
-// Inizializza Puter SDK
 let puter;
 
-async function initPuter() {
-    puter = new Puter();
-    console.log('Puter SDK inizializzato');
+// Load auth token from file or environment
+function loadToken() {
+    if (process.env.PUTER_AUTH_TOKEN) {
+        return process.env.PUTER_AUTH_TOKEN;
+    }
+    try {
+        return fs.readFileSync(TOKEN_FILE, 'utf8').trim();
+    } catch {
+        return null;
+    }
 }
 
-// Endpoint principale compatibile con OpenAI API
-app.post('/v1/chat/completions', async (req, res) => {
-    try {
-        const { messages, model, stream } = req.body;
+function saveToken(token) {
+    fs.writeFileSync(TOKEN_FILE, token, 'utf8');
+    console.log('Token salvato in', TOKEN_FILE);
+}
 
-        console.log(`Richiesta ricevuta - Model: ${model || 'gpt-4o'}, Messages: ${messages.length}`);
-
-        // Chiamata a Puter AI
-        const response = await puter.ai.chat(messages, {
-            model: model || 'gpt-4o',
-            stream: false
-        });
-
-        // Formattiamo la risposta nel formato OpenAI
-        const openAIResponse = {
-            id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
-            object: 'chat.completion',
-            created: Math.floor(Date.now() / 1000),
-            model: model || 'gpt-4o',
-            choices: [{
-                index: 0,
-                message: {
-                    role: 'assistant',
-                    content: response.message?.content || response.toString(),
-                },
-                finish_reason: 'stop'
-            }],
-            usage: {
-                prompt_tokens: 0,
-                completion_tokens: 0,
-                total_tokens: 0
-            }
-        };
-
-        res.json(openAIResponse);
-    } catch (error) {
-        console.error("Errore Puter:", error);
-        res.status(500).json({
-            error: {
-                message: error.message,
-                type: 'puter_error',
-                code: 'internal_error'
+// Browser-based auth flow (works on headless too via manual URL visit)
+function getAuthTokenManual(guiOrigin = 'https://puter.com') {
+    return new Promise((resolve) => {
+        const server = http.createServer((req, res) => {
+            const url = new URL(req.url, 'http://localhost/');
+            const token = url.searchParams.get('token');
+            if (token) {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end('<h1>Autenticazione completata! Puoi chiudere questa finestra.</h1>');
+                server.close();
+                resolve(token);
+            } else {
+                res.writeHead(400, { 'Content-Type': 'text/plain' });
+                res.end('Token mancante');
             }
         });
-    }
-});
 
-// Endpoint per streaming (SSE)
-app.post('/v1/chat/completions/stream', async (req, res) => {
-    try {
-        const { messages, model } = req.body;
+        server.listen(0, '0.0.0.0', function () {
+            const port = this.address().port;
+            const localIP = getLocalIP();
+            const authUrl = `${guiOrigin}/?action=authme&redirectURL=${encodeURIComponent('http://' + localIP + ':' + port)}`;
 
-        res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
-        res.setHeader('Connection', 'keep-alive');
-        res.setHeader('Access-Control-Allow-Origin', '*');
+            console.log('\n============================================');
+            console.log('  AUTENTICAZIONE PUTER RICHIESTA');
+            console.log('============================================');
+            console.log('\nApri questo URL nel browser:');
+            console.log(`\n  ${authUrl}\n`);
+            console.log('Accedi con il tuo account Puter (gratuito).');
+            console.log('Il proxy si avviera automaticamente dopo il login.\n');
 
-        const response = await puter.ai.chat(messages, {
-            model: model || 'gpt-4o',
-            stream: true
-        });
-
-        // Gestione streaming
-        for await (const chunk of response) {
-            const data = {
-                id: 'chatcmpl-' + Math.random().toString(36).substr(2, 9),
-                object: 'chat.completion.chunk',
-                created: Math.floor(Date.now() / 1000),
-                model: model || 'gpt-4o',
-                choices: [{
-                    index: 0,
-                    delta: {
-                        content: chunk.text || ''
-                    },
-                    finish_reason: null
-                }]
-            };
-            res.write(`data: ${JSON.stringify(data)}\n\n`);
-        }
-
-        // Segnale di fine stream
-        res.write(`data: [DONE]\n\n`);
-        res.end();
-    } catch (error) {
-        console.error("Errore streaming Puter:", error);
-        res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`);
-        res.end();
-    }
-});
-
-// Endpoint per elencare i modelli disponibili
-app.get('/v1/models', async (req, res) => {
-    // Lista statica basata sui modelli supportati da Puter.js
-    const start = 1699000000;
-    const staticModels = [
-        // OpenAI
-        { id: 'gpt-4o', object: 'model', created: start, owned_by: 'openai' },
-        { id: 'gpt-4o-mini', object: 'model', created: start, owned_by: 'openai' },
-        { id: 'gpt-3.5-turbo', object: 'model', created: start, owned_by: 'openai' },
-
-        // Anthropic
-        { id: 'claude-3-5-sonnet', object: 'model', created: start, owned_by: 'anthropic' },
-        { id: 'claude-3-opus', object: 'model', created: start, owned_by: 'anthropic' },
-        { id: 'claude-3-haiku', object: 'model', created: start, owned_by: 'anthropic' },
-
-        // Google
-        { id: 'gemini-1.5-pro', object: 'model', created: start, owned_by: 'google' },
-        { id: 'gemini-1.5-flash', object: 'model', created: start, owned_by: 'google' },
-        { id: 'gemma-2-9b-it', object: 'model', created: start, owned_by: 'google' },
-
-        // Meta / Llama
-        { id: 'llama-3.1-405b', object: 'model', created: start, owned_by: 'meta-llama' },
-        { id: 'llama-3.1-70b', object: 'model', created: start, owned_by: 'meta-llama' },
-        { id: 'llama-3.1-8b', object: 'model', created: start, owned_by: 'meta-llama' },
-
-        // Mistral
-        { id: 'mistral-large', object: 'model', created: start, owned_by: 'mistralai' },
-        { id: 'mixtral-8x22b', object: 'model', created: start, owned_by: 'mistralai' },
-        { id: 'mixtral-8x7b', object: 'model', created: start, owned_by: 'mistralai' },
-
-        // Microsoft
-        { id: 'wizardlm-2-8x22b', object: 'model', created: start, owned_by: 'microsoft' },
-
-        // DeepSeek
-        { id: 'deepseek-coder-v2', object: 'model', created: start, owned_by: 'deepseek' },
-        { id: 'deepseek-v2-chat', object: 'model', created: start, owned_by: 'deepseek' },
-    ];
-
-    try {
-        // Tenta di recuperare la lista dinamica se autenticato
-        const dynamicModelsMap = await puter.ai.listModels();
-        // Se otteniamo risultati, convertiamoli nel formato OpenAI
-        // La mappa è { 'openai': ['gpt-4o', ...], 'anthropic': [...] }
-        const dynamicModels = [];
-        for (const [provider, models] of Object.entries(dynamicModelsMap)) {
-            for (const modelId of models) {
-                dynamicModels.push({
-                    id: modelId,
-                    object: 'model',
-                    created: start,
-                    owned_by: provider
-                });
+            // Try to open browser (works if desktop env is available)
+            try {
+                const { exec } = require('child_process');
+                exec(`xdg-open "${authUrl}" 2>/dev/null || open "${authUrl}" 2>/dev/null`);
+            } catch {
+                // Ignore - user can open manually
             }
-        }
-
-        if (dynamicModels.length > 0) {
-            console.log(`Recuperati ${dynamicModels.length} modelli da Puter API`);
-            return res.json({ object: 'list', data: dynamicModels });
-        }
-    } catch (error) {
-        // Ignora errori di auth/network e usa la lista statica
-        console.warn("Impossibile recuperare lista dinamica (probabilmente non autenticato), uso lista statica fallback.");
-    }
-
-    res.json({
-        object: 'list',
-        data: staticModels
+        });
     });
-});
+}
 
-// Health check
-app.get('/health', (req, res) => {
-    res.json({ status: 'ok', message: 'Puter Proxy is running' });
-});
+function getLocalIP() {
+    const os = require('os');
+    const interfaces = os.networkInterfaces();
+    for (const name of Object.keys(interfaces)) {
+        for (const iface of interfaces[name]) {
+            if (iface.family === 'IPv4' && !iface.internal) {
+                return iface.address;
+            }
+        }
+    }
+    return 'localhost';
+}
 
-// CORS middleware
+// Extract text content from Puter AI response (handles both OpenAI and Anthropic formats)
+function extractContent(response) {
+    if (!response) return '';
+
+    const msg = response.message;
+    if (!msg) return response?.toString?.() || '';
+
+    // OpenAI format: message.content is a string
+    if (typeof msg.content === 'string') {
+        return msg.content;
+    }
+
+    // Anthropic format: message.content is array of {type: 'text', text: '...'}
+    if (Array.isArray(msg.content)) {
+        return msg.content
+            .filter(block => block.type === 'text')
+            .map(block => block.text)
+            .join('');
+    }
+
+    return response?.toString?.() || '';
+}
+
+// Format error message (handles both string and object errors from Puter)
+function formatError(err) {
+    if (typeof err.message === 'string') return err.message;
+    if (typeof err.message === 'object') return JSON.stringify(err.message);
+    return String(err);
+}
+
+async function initPuter() {
+    const { init } = require('@heyputer/puter.js/src/init.cjs');
+
+    let token = loadToken();
+
+    if (!token) {
+        console.log('Nessun token Puter trovato. Avvio autenticazione...');
+        token = await getAuthTokenManual();
+        saveToken(token);
+    }
+
+    puter = init(token);
+    console.log('Puter.js inizializzato con successo');
+
+    // Verify token works with a test call
+    try {
+        const test = await puter.ai.chat('ping', { model: 'gpt-4o-mini' });
+        const content = extractContent(test);
+        console.log('Test AI riuscito:', content.substring(0, 80));
+    } catch (err) {
+        const errMsg = formatError(err);
+        console.warn('Test AI fallito:', errMsg);
+        // Token might be expired, re-authenticate
+        if (errMsg.includes('auth') || errMsg.includes('token') || errMsg.includes('401') || errMsg.includes('log_in')) {
+            console.log('Token scaduto. Riautenticazione...');
+            try { fs.unlinkSync(TOKEN_FILE); } catch {}
+            token = await getAuthTokenManual();
+            saveToken(token);
+            puter = init(token);
+            console.log('Riautenticazione completata');
+        }
+    }
+}
+
+// --- CORS middleware (BEFORE routes) ---
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
@@ -189,15 +154,259 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(express.json());
+
+// --- Chat completions (OpenAI-compatible) ---
+app.post('/v1/chat/completions', async (req, res) => {
+    try {
+        const { messages, model, stream, temperature, max_tokens } = req.body;
+        const useModel = model || 'gpt-4o-mini';
+
+        console.log(`Richiesta - Model: ${useModel}, Messages: ${messages?.length || 0}, Stream: ${!!stream}`);
+
+        if (!messages || !Array.isArray(messages) || messages.length === 0) {
+            return res.status(400).json({
+                error: { message: 'messages is required and must be a non-empty array', type: 'invalid_request_error' }
+            });
+        }
+
+        const chatOptions = { model: useModel };
+        if (temperature !== undefined) chatOptions.temperature = temperature;
+        if (max_tokens !== undefined) chatOptions.max_tokens = max_tokens;
+
+        if (stream) {
+            // --- Streaming response (SSE) ---
+            res.setHeader('Content-Type', 'text/event-stream');
+            res.setHeader('Cache-Control', 'no-cache');
+            res.setHeader('Connection', 'keep-alive');
+
+            chatOptions.stream = true;
+            const completionId = 'chatcmpl-' + Math.random().toString(36).substring(2, 11);
+
+            try {
+                const response = await puter.ai.chat(messages, chatOptions);
+
+                // The official SDK returns a Node.js readable stream for streaming
+                let buffer = '';
+                const processLine = (line) => {
+                    const trimmed = line.trim();
+                    if (!trimmed) return;
+
+                    // Parse SSE data from Puter
+                    const payload = trimmed.startsWith('data:') ? trimmed.slice(5).trim() : trimmed;
+                    try {
+                        const data = JSON.parse(payload);
+                        let content = '';
+
+                        if (data.success && data.result?.message?.content) {
+                            content = data.result.message.content;
+                        } else if (data.type === 'text' && data.text) {
+                            content = data.text;
+                        } else if (typeof data === 'string') {
+                            content = data;
+                        }
+
+                        if (content) {
+                            const chunk = {
+                                id: completionId,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: useModel,
+                                choices: [{
+                                    index: 0,
+                                    delta: { content },
+                                    finish_reason: null
+                                }]
+                            };
+                            res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                        }
+                    } catch {
+                        // Not JSON, treat as plain text chunk
+                        if (payload && payload !== '[DONE]') {
+                            const chunk = {
+                                id: completionId,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: useModel,
+                                choices: [{
+                                    index: 0,
+                                    delta: { content: payload },
+                                    finish_reason: null
+                                }]
+                            };
+                            res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                        }
+                    }
+                };
+
+                if (response && typeof response.on === 'function') {
+                    // Node.js stream
+                    response.on('data', (chunk) => {
+                        buffer += chunk.toString();
+                        const lines = buffer.split(/\r?\n/);
+                        buffer = lines.pop();
+                        for (const line of lines) processLine(line);
+                    });
+
+                    response.on('end', () => {
+                        if (buffer) processLine(buffer);
+                        // Send final chunk with finish_reason
+                        const finalChunk = {
+                            id: completionId,
+                            object: 'chat.completion.chunk',
+                            created: Math.floor(Date.now() / 1000),
+                            model: useModel,
+                            choices: [{
+                                index: 0,
+                                delta: {},
+                                finish_reason: 'stop'
+                            }]
+                        };
+                        res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+                        res.write('data: [DONE]\n\n');
+                        res.end();
+                    });
+
+                    response.on('error', (err) => {
+                        console.error('Stream error:', err);
+                        res.write(`data: ${JSON.stringify({ error: { message: err.message } })}\n\n`);
+                        res.end();
+                    });
+                } else if (response && typeof response[Symbol.asyncIterator] === 'function') {
+                    // Async iterable
+                    for await (const chunk of response) {
+                        const text = chunk?.text || chunk?.message?.content || (typeof chunk === 'string' ? chunk : '');
+                        if (text) {
+                            const sseChunk = {
+                                id: completionId,
+                                object: 'chat.completion.chunk',
+                                created: Math.floor(Date.now() / 1000),
+                                model: useModel,
+                                choices: [{
+                                    index: 0,
+                                    delta: { content: text },
+                                    finish_reason: null
+                                }]
+                            };
+                            res.write(`data: ${JSON.stringify(sseChunk)}\n\n`);
+                        }
+                    }
+                    const finalChunk = {
+                        id: completionId,
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: useModel,
+                        choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
+                    };
+                    res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                } else {
+                    // Fallback: response is already the full text
+                    const content = response?.message?.content || response?.toString() || '';
+                    const chunk = {
+                        id: completionId,
+                        object: 'chat.completion.chunk',
+                        created: Math.floor(Date.now() / 1000),
+                        model: useModel,
+                        choices: [{
+                            index: 0,
+                            delta: { content },
+                            finish_reason: 'stop'
+                        }]
+                    };
+                    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    res.write('data: [DONE]\n\n');
+                    res.end();
+                }
+            } catch (streamErr) {
+                console.error('Errore streaming:', streamErr);
+                res.write(`data: ${JSON.stringify({ error: { message: streamErr.message } })}\n\n`);
+                res.end();
+            }
+        } else {
+            // --- Non-streaming response ---
+            const response = await puter.ai.chat(messages, chatOptions);
+
+            const content = extractContent(response);
+
+            const openAIResponse = {
+                id: 'chatcmpl-' + Math.random().toString(36).substring(2, 11),
+                object: 'chat.completion',
+                created: Math.floor(Date.now() / 1000),
+                model: useModel,
+                choices: [{
+                    index: 0,
+                    message: {
+                        role: 'assistant',
+                        content: content,
+                    },
+                    finish_reason: 'stop'
+                }],
+                usage: {
+                    prompt_tokens: 0,
+                    completion_tokens: 0,
+                    total_tokens: 0
+                }
+            };
+
+            res.json(openAIResponse);
+        }
+    } catch (error) {
+        const errMsg = formatError(error);
+        console.error('Errore chat completions:', errMsg);
+        res.status(500).json({
+            error: {
+                message: errMsg,
+                type: 'puter_error',
+                code: 'internal_error'
+            }
+        });
+    }
+});
+
+// --- List models (OpenAI-compatible) ---
+app.get('/v1/models', async (req, res) => {
+    const start = 1699000000;
+    const fallbackModels = [
+        { id: 'gpt-4o', object: 'model', created: start, owned_by: 'openai' },
+        { id: 'gpt-4o-mini', object: 'model', created: start, owned_by: 'openai' },
+        { id: 'gpt-4.1', object: 'model', created: start, owned_by: 'openai' },
+        { id: 'gpt-4.1-mini', object: 'model', created: start, owned_by: 'openai' },
+        { id: 'o3-mini', object: 'model', created: start, owned_by: 'openai' },
+        { id: 'claude-3-5-sonnet', object: 'model', created: start, owned_by: 'anthropic' },
+        { id: 'claude-3-haiku', object: 'model', created: start, owned_by: 'anthropic' },
+        { id: 'gemini-2.0-flash', object: 'model', created: start, owned_by: 'google' },
+        { id: 'gemini-1.5-pro', object: 'model', created: start, owned_by: 'google' },
+        { id: 'llama-3.1-70b', object: 'model', created: start, owned_by: 'meta-llama' },
+        { id: 'mistral-large', object: 'model', created: start, owned_by: 'mistralai' },
+        { id: 'deepseek-chat', object: 'model', created: start, owned_by: 'deepseek' },
+        { id: 'deepseek-reasoner', object: 'model', created: start, owned_by: 'deepseek' },
+    ];
+
+    res.json({ object: 'list', data: fallbackModels });
+});
+
+// --- Health check ---
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', message: 'Puter Proxy is running', authenticated: !!puter });
+});
+
+// --- Start ---
 const PORT = process.env.PORT || 4000;
 
 initPuter().then(() => {
-    app.listen(PORT, () => {
-        console.log(`\n🚀 Puter-OpenClaw Proxy attivo su http://localhost:${PORT}`);
-        console.log(`\n📋 Configurazione OpenClaw:`);
-        console.log(`   Provider: openai`);
-        console.log(`   Base URL: http://localhost:${PORT}/v1`);
-        console.log(`   API Key: any-string`);
-        console.log(`   Model: gpt-4o (o altri modelli supportati)\n`);
+    app.listen(PORT, '0.0.0.0', () => {
+        const localIP = getLocalIP();
+        console.log(`\nPuter-OpenAI Proxy attivo:`);
+        console.log(`  Local:   http://localhost:${PORT}`);
+        console.log(`  Network: http://${localIP}:${PORT}`);
+        console.log(`\nConfigurazione client:`);
+        console.log(`  Base URL: http://localhost:${PORT}/v1`);
+        console.log(`  API Key:  qualsiasi-stringa`);
+        console.log(`  Model:    gpt-4o-mini (o altri)\n`);
     });
+}).catch((err) => {
+    console.error('Errore fatale:', err);
+    process.exit(1);
 });
