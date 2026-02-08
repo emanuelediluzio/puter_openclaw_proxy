@@ -159,10 +159,10 @@ app.use(express.json());
 // --- Chat completions (OpenAI-compatible) ---
 app.post('/v1/chat/completions', async (req, res) => {
     try {
-        const { messages, model, stream, temperature, max_tokens } = req.body;
+        const { messages, model, stream, temperature, max_tokens, tools, tool_choice, stream_options } = req.body;
         const useModel = model || 'gpt-4.1';
 
-        console.log(`Richiesta - Model: ${useModel}, Messages: ${messages?.length || 0}, Stream: ${!!stream}`);
+        console.log(`Richiesta - Model: ${useModel}, Messages: ${messages?.length || 0}, Stream: ${!!stream}, Tools: ${tools?.length || 0}`);
 
         if (!messages || !Array.isArray(messages) || messages.length === 0) {
             return res.status(400).json({
@@ -173,6 +173,8 @@ app.post('/v1/chat/completions', async (req, res) => {
         const chatOptions = { model: useModel };
         if (temperature !== undefined) chatOptions.temperature = temperature;
         if (max_tokens !== undefined) chatOptions.max_tokens = max_tokens;
+        if (tools && tools.length > 0) chatOptions.tools = tools;
+        if (tool_choice !== undefined) chatOptions.tool_choice = tool_choice;
 
         if (stream) {
             // --- Streaming response (SSE) ---
@@ -302,20 +304,57 @@ app.post('/v1/chat/completions', async (req, res) => {
                     res.write('data: [DONE]\n\n');
                     res.end();
                 } else {
-                    // Fallback: response is already the full text
-                    const content = response?.message?.content || response?.toString() || '';
-                    const chunk = {
-                        id: completionId,
-                        object: 'chat.completion.chunk',
-                        created: Math.floor(Date.now() / 1000),
-                        model: useModel,
-                        choices: [{
-                            index: 0,
-                            delta: { content },
-                            finish_reason: 'stop'
-                        }]
-                    };
-                    res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    // Fallback: response is already complete (non-streamed)
+                    const msg = response?.message || response;
+                    const content = msg?.content || response?.toString() || '';
+                    const toolCalls = msg?.tool_calls || response?.tool_calls;
+
+                    if (toolCalls && Array.isArray(toolCalls)) {
+                        // Send tool calls as a single chunk
+                        const tcDelta = {
+                            tool_calls: toolCalls.map((tc, i) => ({
+                                index: i,
+                                id: tc.id || `call_${Math.random().toString(36).substring(2, 11)}`,
+                                type: 'function',
+                                function: {
+                                    name: tc.function?.name || tc.name,
+                                    arguments: typeof tc.function?.arguments === 'string'
+                                        ? tc.function.arguments
+                                        : JSON.stringify(tc.function?.arguments || tc.arguments || {}),
+                                }
+                            }))
+                        };
+                        if (content) tcDelta.content = content;
+                        const chunk = {
+                            id: completionId,
+                            object: 'chat.completion.chunk',
+                            created: Math.floor(Date.now() / 1000),
+                            model: useModel,
+                            choices: [{ index: 0, delta: tcDelta, finish_reason: null }]
+                        };
+                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                        const finalChunk = {
+                            id: completionId,
+                            object: 'chat.completion.chunk',
+                            created: Math.floor(Date.now() / 1000),
+                            model: useModel,
+                            choices: [{ index: 0, delta: {}, finish_reason: 'tool_calls' }]
+                        };
+                        res.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+                    } else {
+                        const chunk = {
+                            id: completionId,
+                            object: 'chat.completion.chunk',
+                            created: Math.floor(Date.now() / 1000),
+                            model: useModel,
+                            choices: [{
+                                index: 0,
+                                delta: { content },
+                                finish_reason: 'stop'
+                            }]
+                        };
+                        res.write(`data: ${JSON.stringify(chunk)}\n\n`);
+                    }
                     res.write('data: [DONE]\n\n');
                     res.end();
                 }
@@ -328,7 +367,29 @@ app.post('/v1/chat/completions', async (req, res) => {
             // --- Non-streaming response ---
             const response = await puter.ai.chat(messages, chatOptions);
 
+            const msg = response?.message || response;
             const content = extractContent(response);
+
+            // Check if response contains tool calls
+            const toolCalls = msg?.tool_calls || response?.tool_calls;
+
+            const assistantMessage = {
+                role: 'assistant',
+                content: toolCalls ? (content || null) : content,
+            };
+
+            if (toolCalls && Array.isArray(toolCalls)) {
+                assistantMessage.tool_calls = toolCalls.map((tc, i) => ({
+                    id: tc.id || `call_${Math.random().toString(36).substring(2, 11)}`,
+                    type: 'function',
+                    function: {
+                        name: tc.function?.name || tc.name,
+                        arguments: typeof tc.function?.arguments === 'string'
+                            ? tc.function.arguments
+                            : JSON.stringify(tc.function?.arguments || tc.arguments || {}),
+                    }
+                }));
+            }
 
             const openAIResponse = {
                 id: 'chatcmpl-' + Math.random().toString(36).substring(2, 11),
@@ -337,11 +398,8 @@ app.post('/v1/chat/completions', async (req, res) => {
                 model: useModel,
                 choices: [{
                     index: 0,
-                    message: {
-                        role: 'assistant',
-                        content: content,
-                    },
-                    finish_reason: 'stop'
+                    message: assistantMessage,
+                    finish_reason: toolCalls ? 'tool_calls' : 'stop'
                 }],
                 usage: {
                     prompt_tokens: 0,
